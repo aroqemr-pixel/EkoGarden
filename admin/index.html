@@ -455,8 +455,12 @@ document.getElementById('btn-save-order').addEventListener('click', function() {
   var items = oItems.filter(function(it) { return it.art; });
   if (!items.length) { toast('En az bir urun secin!', 'er'); return; }
   var total = items.reduce(function(s, it) {
-    var p = PRODS.find(function(x) { return (x.artikel || String(x.id)) === it.art; });
-    var price = p ? parseFloat((p.fiyat || '0').replace('\u20ac', '')) || 0 : 0;
+    var artVal = String(it.art || '');
+    var p = PRODS.find(function(x) {
+      var xa = String(x.artikel || '');
+      return xa === artVal || xa === artVal.replace('#','') || '#'+xa === artVal;
+    });
+    var price = p ? parseFloat((p.fiyat || '0').replace('€','').replace('EUR','')) || 0 : 0;
     return s + price * Number(it.qty);
   }, 0);
   var order = {
@@ -497,8 +501,12 @@ function renderOrders() {
   ORDERS.forEach(function(o) {
     var items = Array.isArray(o.items) ? o.items : [];
     var istr = items.map(function(it) {
-      var p = PRODS.find(function(x) { return (x.artikel || String(x.id)) === it.art; });
-      return (p ? p.latince : it.art) + ' x' + it.qty;
+      var artVal = String(it.art || '');
+      var p = PRODS.find(function(x) {
+        var xa = String(x.artikel || '');
+        return xa === artVal || xa === artVal.replace('#','') || '#'+xa === artVal;
+      });
+      return (p ? p.latince + (p.cesit ? ' - '+p.cesit : '') : artVal) + ' x' + it.qty;
     }).join(', ');
     var opts = '';
     ['b', 'h', 't', 'i'].forEach(function(s) {
