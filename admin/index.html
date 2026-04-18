@@ -318,11 +318,29 @@ function ld(show, msg) {
 }
 function apiCall(params) {
   var u = new URL(API);
-  Object.keys(params).forEach(function(k) {
-    var v = params[k];
-    u.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-  });
-  return fetch(u.toString()).then(function(r) { return r.json(); });
+  // Buyuk veri icin POST, kucuk istekler icin GET
+  var dataStr = params.data ? JSON.stringify(params.data) : null;
+  var isLarge = dataStr && dataStr.length > 1000;
+  
+  if (isLarge) {
+    // POST ile gonder
+    var formData = new FormData();
+    Object.keys(params).forEach(function(k) {
+      var v = params[k];
+      formData.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+    });
+    return fetch(API, {
+      method: 'POST',
+      body: formData
+    }).then(function(r) { return r.json(); });
+  } else {
+    // GET ile gonder
+    Object.keys(params).forEach(function(k) {
+      var v = params[k];
+      u.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+    });
+    return fetch(u.toString()).then(function(r) { return r.json(); });
+  }
 }
 
 // AUTH
@@ -607,29 +625,59 @@ document.getElementById('btn-do-import').addEventListener('click', function() {
   if (!confirm(pending.parsed.length + ' urunle katalog guncelleniyor. Mevcut katalog silinecek. Emin misiniz?')) return;
   var btn = this; btn.disabled = true; btn.textContent = 'Yukleniyor...';
   ld(true, "Katalog guncelleniyor...");
-  apiCall({action: 'replaceProducts', data: pending.parsed}).then(function(r) {
-    if (r.ok) {
-      HIST.unshift({
-        date: new Date().toLocaleDateString('tr-TR'),
-        fname: pending.fname,
-        total: r.total
+  // Parcali yukle - 100'er 100'er
+  var allProds = pending.parsed;
+  var total = allProds.length;
+  var batchSize = 100;
+  var batches = [];
+  for (var bi = 0; bi < total; bi += batchSize) {
+    batches.push(allProds.slice(bi, bi + batchSize));
+  }
+  
+  // Once temizle, sonra parcali ekle
+  ld(true, 'Katalog temizleniyor...');
+  apiCall({action: 'replaceProducts', data: batches[0]}).then(function(r) {
+    if (!r.ok) { toast('Hata: ' + (r.error||'?'), 'er'); ld(false); return; }
+    
+    // Kalan parcalari importProducts ile ekle
+    var remaining = batches.slice(1);
+    var idx = 0;
+    
+    function sendNext() {
+      if (idx >= remaining.length) {
+        // Bitti
+        HIST.unshift({
+          date: new Date().toLocaleDateString('tr-TR'),
+          fname: pending.fname,
+          total: total
+        });
+        localStorage.setItem('eg_hist', JSON.stringify(HIST));
+        return apiCall({action: 'getProducts'}).then(function(pr) {
+          if (pr.products) {
+            PRODS = pr.products.map(function(p) { return Object.assign({}, p, {id: Number(p.id)||p.id}); });
+          }
+          renderHist(); renderProd();
+          toast(total + ' urun yuklendi!', 'ok');
+          pending = null;
+          document.getElementById('import-prev').style.display = 'none';
+          document.getElementById('html-file').value = '';
+          btn.disabled = false; btn.textContent = "Katalogu Guncelle"; ld(false);
+        });
+      }
+      var pct = Math.round((idx / remaining.length) * 100);
+      ld(true, 'Yukleniyor... ' + pct + '%');
+      apiCall({action: 'importBatch', data: remaining[idx]}).then(function(r2) {
+        idx++;
+        sendNext();
+      }).catch(function() {
+        toast('Parca hatasi, devam ediliyor...', 'er');
+        idx++;
+        sendNext();
       });
-      localStorage.setItem('eg_hist', JSON.stringify(HIST));
-      return apiCall({action: 'getProducts'}).then(function(pr) {
-        if (pr.products) {
-          PRODS = pr.products.map(function(p) { return Object.assign({}, p, {id: Number(p.id) || p.id}); });
-        }
-        renderHist(); renderProd();
-        toast(r.total + ' urun yuklendi!', 'ok');
-        pending = null;
-        document.getElementById('import-prev').style.display = 'none';
-        document.getElementById('html-file').value = '';
-      });
-    } else {
-      toast('Hata: ' + (r.error || '?'), 'er');
     }
-  }).catch(function() { toast('Baglanti hatasi', 'er'); })
-  .finally(function() { btn.disabled = false; btn.textContent = "Katalogu Guncelle"; ld(false); });
+    sendNext();
+    
+  }).catch(function() { toast('Baglanti hatasi', 'er'); btn.disabled = false; btn.textContent = "Katalogu Guncelle"; ld(false); });
 });
 function renderHist() {
   var tb = document.getElementById('hist-body');
