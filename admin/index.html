@@ -252,7 +252,7 @@ tr:hover td{background:rgba(74,140,106,.03)}
 <div class="card"><div class="card-title">Yeni Sezon Listesi Yukle</div>
 <p style="font-size:.82rem;color:var(--muted);margin-bottom:.9rem;line-height:1.6">HTML katalog dosyasini surukle veya sec. Mevcut urunler korunur.</p>
 <div class="uz" id="uz"><input type="file" id="html-file" accept=".html,.htm"><div style="font-size:2rem;margin-bottom:.4rem">&#128196;</div><p id="uz-click-label" style="color:var(--g2);cursor:pointer;font-weight:600">Dosya secmek icin tikla</p><p style="font-size:.75rem;margin-top:.3rem;color:var(--muted)">veya surukle birak</p></div>
-<div id="import-prev" style="display:none;background:var(--g7);border-radius:8px;padding:.9rem;margin-top:.7rem"><strong style="font-size:.85rem">Analiz</strong><div class="irow" id="irow"></div><div id="import-detail" style="font-size:.78rem;color:var(--muted);margin-top:.2rem"></div><button class="btn-import" id="btn-do-import">Google Sheets e Yukle</button></div>
+<div id="import-prev" style="display:none;background:var(--g7);border-radius:8px;padding:.9rem;margin-top:.7rem"><strong style="font-size:.85rem">Analiz</strong><div class="irow" id="irow"></div><div id="import-detail" style="font-size:.78rem;color:var(--muted);margin-top:.2rem"></div><button class="btn-import" id="btn-do-import">Katalogu Guncelle (Eskiyi Sil)</button></div>
 </div>
 <div class="tw"><div class="tw-head"><h3>Yukleme Gecmisi</h3></div><div style="overflow-x:auto"><table><thead><tr><th>Tarih</th><th>Dosya</th><th>Yeni</th><th>Guncellenen</th><th>Toplam</th></tr></thead><tbody id="hist-body"></tbody></table></div></div>
 </div>
@@ -559,19 +559,12 @@ function readFile(f) {
 }
 function analyze(html, fname) {
   var parsed = parseHTML(html);
-  var arts = {};
-  PRODS.forEach(function(p) { if (p.artikel) arts[p.artikel] = true; });
-  var np = parsed.filter(function(p) { return p.artikel && !arts[p.artikel]; });
-  var up = parsed.filter(function(p) { return p.artikel && arts[p.artikel]; });
   pending = {parsed: parsed, fname: fname};
   document.getElementById('irow').innerHTML =
-    '<div class="is">Toplam: <strong>' + parsed.length + '</strong></div>' +
-    '<div class="is">Yeni: <strong style="color:var(--g2)">' + np.length + '</strong></div>' +
-    '<div class="is">Guncellenen: <strong style="color:var(--amber)">' + up.length + '</strong></div>';
-  var det = np.length > 0
-    ? 'Yeni: ' + np.slice(0, 3).map(function(p) { return p.latince; }).join(', ') + (np.length > 3 ? '...' : '')
-    : 'Yeni urun yok.';
-  document.getElementById('import-detail').textContent = det;
+    '<div class="is">Dosyadaki urun: <strong>' + parsed.length + '</strong></div>' +
+    '<div class="is">Mevcut katalog: <strong>' + PRODS.length + '</strong></div>';
+  document.getElementById('import-detail').textContent =
+    'Yuklenince mevcut katalog SILINIR ve bu ' + parsed.length + ' urunle DEGISTIRILIR.';
   document.getElementById('import-prev').style.display = 'block';
 }
 function parseHTML(html) {
@@ -603,18 +596,23 @@ function parseHTML(html) {
 }
 document.getElementById('btn-do-import').addEventListener('click', function() {
   if (!pending) return;
+  if (!confirm(pending.parsed.length + ' urunle katalog guncelleniyor. Mevcut katalog silinecek. Emin misiniz?')) return;
   var btn = this; btn.disabled = true; btn.textContent = 'Yukleniyor...';
-  ld(true, "Google Sheets'e aktariliyor...");
-  apiCall({action: 'importProducts', data: pending.parsed}).then(function(r) {
+  ld(true, "Katalog guncelleniyor...");
+  apiCall({action: 'replaceProducts', data: pending.parsed}).then(function(r) {
     if (r.ok) {
-      HIST.unshift({date: new Date().toLocaleDateString('tr-TR'), fname: pending.fname, added: r.added, updated: r.updated, total: PRODS.length + r.added});
+      HIST.unshift({
+        date: new Date().toLocaleDateString('tr-TR'),
+        fname: pending.fname,
+        total: r.total
+      });
       localStorage.setItem('eg_hist', JSON.stringify(HIST));
       return apiCall({action: 'getProducts'}).then(function(pr) {
         if (pr.products) {
           PRODS = pr.products.map(function(p) { return Object.assign({}, p, {id: Number(p.id) || p.id}); });
         }
         renderHist(); renderProd();
-        toast(r.added + ' yeni eklendi', 'ok');
+        toast(r.total + ' urun yuklendi!', 'ok');
         pending = null;
         document.getElementById('import-prev').style.display = 'none';
         document.getElementById('html-file').value = '';
@@ -623,7 +621,7 @@ document.getElementById('btn-do-import').addEventListener('click', function() {
       toast('Hata: ' + (r.error || '?'), 'er');
     }
   }).catch(function() { toast('Baglanti hatasi', 'er'); })
-  .finally(function() { btn.disabled = false; btn.textContent = "Google Sheets'e Yukle"; ld(false); });
+  .finally(function() { btn.disabled = false; btn.textContent = "Katalogu Guncelle"; ld(false); });
 });
 function renderHist() {
   var tb = document.getElementById('hist-body');
@@ -634,10 +632,10 @@ function renderHist() {
   var rows = '';
   HIST.forEach(function(h) {
     rows += '<tr><td style="font-size:.8rem">' + h.date + '</td>';
-    rows += '<td style="font-size:.75rem;color:var(--muted)">' + h.fname + '</td>';
-    rows += '<td style="color:var(--g2);font-weight:600">+' + h.added + '</td>';
-    rows += '<td style="color:var(--amber);font-weight:600">~' + h.updated + '</td>';
-    rows += '<td style="font-weight:600">' + h.total + '</td></tr>';
+    rows += '<td style="font-size:.75rem;color:var(--muted)">' + (h.fname || '-') + '</td>';
+    rows += '<td style="color:var(--g2);font-weight:600">' + (h.added !== undefined ? '+'+h.added : '-') + '</td>';
+    rows += '<td style="color:var(--amber);font-weight:600">' + (h.updated !== undefined ? '~'+h.updated : '-') + '</td>';
+    rows += '<td style="font-weight:600">' + (h.total || '-') + '</td></tr>';
   });
   tb.innerHTML = rows;
 }
