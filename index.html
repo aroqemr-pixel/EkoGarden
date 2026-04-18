@@ -60,9 +60,9 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--g0);min-
 
 .overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,.7);backdrop-filter:blur(5px);z-index:500;align-items:center;justify-content:center;padding:1rem}
 .overlay.on{display:flex}
-.modal{background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.4);animation:su .28s ease}
+.modal{background:#fff;border-radius:16px;max-width:700px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.4);animation:su .28s ease}
 @keyframes su{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-.modal-img{height:320px;background:var(--g7);overflow:hidden;position:relative}
+.modal-img{height:420px;background:var(--g7);overflow:hidden;position:relative}
 .modal-img img{width:100%;height:100%;object-fit:cover;object-position:center}
 .modal-img-ph{height:220px;background:var(--g6);display:flex;align-items:center;justify-content:center;font-size:5rem;opacity:.4;position:relative}
 .modal-body{padding:1.5rem}
@@ -247,7 +247,7 @@ function openModal(id){
   const p=PRODUCTS.find(x=>String(x.id)===String(id));if(!p)return;
   const src=imgSrc(p);
   document.getElementById('modal-img-wrap').innerHTML=src
-    ?`<div class="modal-img"><img src="${src}" onerror="this.parentElement.innerHTML='<div class=modal-img-ph style=height:320px>🌱</div>'"><button class="mcls" onclick="closeModal()">✕</button></div>`
+    ?`<div class="modal-img"><img src="${src}" onerror="this.parentElement.innerHTML='<div class=modal-img-ph style=height:420px>🌱</div>'"><button class="mcls" onclick="closeModal()">✕</button></div>`
     :`<div class="modal-img-ph">🌱<button class="mcls" style="position:absolute;top:.8rem;right:.8rem" onclick="closeModal()">✕</button></div>`;
   document.getElementById('m-cat').textContent=p.cat||'';
   document.getElementById('m-lat').textContent=p.latince||'—';
