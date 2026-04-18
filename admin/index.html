@@ -265,7 +265,11 @@ let oItems = [], pendingImport = null, nextTempId = 99000;
 async function api(params){
   const url=new URL(API);
   Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,typeof v==='object'?JSON.stringify(v):v));
-  return (await fetch(url)).json();
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    mode: 'cors',
+  });
+  return res.json();
 }
 function loading(show,msg='İşleniyor...'){document.getElementById('loading').classList.toggle('hidden',!show);document.getElementById('lmsg').textContent=msg;}
 function toast(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className='toast '+type;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),3200);}
@@ -283,13 +287,18 @@ function doLogout(){sessionStorage.removeItem('eg_auth');document.getElementById
 async function initAdmin(){
   document.getElementById('o-date').value=new Date().toISOString().slice(0,10);
   oItems=[];addOItem();renderHist();
-  loading(true,'Veriler yükleniyor...');
+  loading(true,'Ürünler yükleniyor...');
   try{
-    const [pr,or_]=await Promise.all([api({action:'getProducts'}),api({action:'getOrders'})]);
-    if(pr.products&&pr.products.length>0) PRODUCTS=pr.products.map(p=>({...p,id:Number(p.id)||p.id}));
+    const pr = await api({action:'getProducts'});
+    if(pr.products&&pr.products.length>0)
+      PRODUCTS=pr.products.map(p=>({...p,id:Number(p.id)||p.id}));
+  }catch(e){ toast('Ürünler yüklenemedi — bundled liste kullanılıyor','er'); }
+  loading(true,'Siparişler yükleniyor...');
+  try{
+    const or_ = await api({action:'getOrders'});
     ORDERS=or_.orders||[];
     ORDERS.forEach(o=>{if(typeof o.items==='string')try{o.items=JSON.parse(o.items);}catch(e){o.items=[];}});
-  }catch(e){toast('Bağlantı hatası','er');}
+  }catch(e){ toast('Siparişler yüklenemedi','er'); }
   loading(false);
   renderOrders();renderPAdmin();renderStats();
 }
@@ -425,7 +434,14 @@ function renderStats(){
   document.getElementById('sg').innerHTML=`<div class="sc"><div class="sv">${ORDERS.length}</div><div class="sl">Toplam Sipariş</div></div><div class="sc"><div class="sv">€${total.toFixed(2)}</div><div class="sl">Toplam Ciro</div></div><div class="sc"><div class="sv">${ORDERS.filter(o=>o.status==='b').length}</div><div class="sl">Bekleyen</div></div><div class="sc"><div class="sv">${ORDERS.filter(o=>o.status==='t').length}</div><div class="sl">Teslim</div></div><div class="sc"><div class="sv">${PRODUCTS.length}</div><div class="sl">Ürün Sayısı</div></div>`;
   document.getElementById('rec-body').innerHTML=ORDERS.slice(0,10).map(o=>`<tr><td>${o.name}</td><td>€${o.total}</td><td><span class="sb ${o.status}">${STATUS_MAP[o.status]||o.status}</span></td><td style="font-size:.76rem;color:var(--muted)">${o.date||'—'}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:1.5rem">Sipariş yok</td></tr>';
 }
-if(sessionStorage.getItem('eg_auth')==='1'){document.getElementById('adm-login').style.display='none';document.getElementById('adm-panel').style.display='block';initAdmin();}
+// Sayfa yüklenince session kontrolü
+window.addEventListener('DOMContentLoaded', function(){
+  if(sessionStorage.getItem('eg_auth')==='1'){
+    document.getElementById('adm-login').style.display='none';
+    document.getElementById('adm-panel').style.display='block';
+    initAdmin();
+  }
+});
 </script>
 </body>
 </html>
