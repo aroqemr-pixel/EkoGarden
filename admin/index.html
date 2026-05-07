@@ -290,7 +290,14 @@ var API_URL = "https://script.google.com/macros/s/AKfycbwTSGNwT0mQ6ou7TM7uJt_Iqt
 
 <script>
 // Decode products
-var PRODS = JSON.parse(atob(PRODUCTS_B64));
+var PRODS = (function() {
+  var b64 = PRODUCTS_B64;
+  var binary = atob(b64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  var text = new TextDecoder('utf-8').decode(bytes);
+  return JSON.parse(text);
+})();
 var API = API_URL;
 var IMG = '../img/';
 var SM = {b:'Bekliyor', h:'Hazirlaniyor', t:'Teslim', i:'Iptal'};
@@ -427,32 +434,77 @@ function addItem() {
   oItems.push({uid: Date.now(), art: '', qty: 1});
   renderItems();
 }
+function buildProdLabel(p) {
+  var lbl = p.latince || '';
+  if (p.cesit) lbl += ' - ' + p.cesit;
+  if (p.fiyat) lbl += ' (' + p.fiyat + ')';
+  return lbl;
+}
+
+// Build a lookup map: artikel -> label
+var PROD_MAP = {};
+PRODS.forEach(function(p) {
+  if (p.artikel) PROD_MAP[p.artikel] = buildProdLabel(p);
+});
+
 function renderItems() {
+  // Build datalist once
+  var dlId = 'prod-datalist';
+  if (!document.getElementById(dlId)) {
+    var dl = document.createElement('datalist');
+    dl.id = dlId;
+    PRODS.forEach(function(p) {
+      if (!p.artikel) return;
+      var opt = document.createElement('option');
+      opt.value = p.artikel;
+      opt.label = buildProdLabel(p);
+      dl.appendChild(opt);
+    });
+    document.body.appendChild(dl);
+  }
+
   var html = '';
   oItems.forEach(function(it, i) {
-    var opts = '<option value="">- Secin -</option>';
-    PRODS.forEach(function(p) {
-      var val = p.artikel || String(p.id);
-      var sel = it.art === val ? ' selected' : '';
-      var lbl = p.latince;
-      if (p.cesit) lbl += ' - ' + p.cesit;
-      if (p.fiyat) lbl += ' (' + p.fiyat + ')';
-      opts += '<option value="' + val + '"' + sel + '>' + lbl + '</option>';
-    });
+    var currentLabel = it.art ? (PROD_MAP[it.art] || it.art) : '';
     html += '<div class="oi-row">';
-    html += '<select data-idx="' + i + '" data-key="art">' + opts + '</select>';
-    html += '<input type="number" min="1" value="' + it.qty + '" data-idx="' + i + '" data-key="qty" style="width:60px">';
+    html += '<div style="display:flex;flex-direction:column;flex:1;gap:2px">';
+    html += '<input type="text" list="prod-datalist" placeholder="Ara: latince adi veya artikel..." ';
+    html += 'data-idx="' + i + '" data-key="art-search" ';
+    html += 'value="' + (it.art || '') + '" ';
+    html += 'style="flex:1" autocomplete="off">';
+    if (currentLabel && currentLabel !== it.art) {
+      html += '<small style="color:var(--g2);font-size:.7rem;padding-left:2px">' + currentLabel + '</small>';
+    }
+    html += '</div>';
+    html += '<input type="number" min="1" value="' + (it.qty || 1) + '" data-idx="' + i + '" data-key="qty" style="width:60px">';
     html += '<button class="rm-btn" data-idx="' + i + '">x</button>';
     html += '</div>';
   });
   document.getElementById('oi-list').innerHTML = html;
+
   // Bind events
-  document.querySelectorAll('#oi-list select').forEach(function(el) {
+  document.querySelectorAll('#oi-list input[data-key="art-search"]').forEach(function(el) {
+    el.addEventListener('input', function() {
+      var idx = parseInt(this.dataset.idx);
+      var val = this.value.trim();
+      // Accept if it matches an artikel
+      if (PROD_MAP[val]) {
+        oItems[idx].art = val;
+        // Show label below
+        var small = this.parentNode.querySelector('small');
+        if (!small) { small = document.createElement('small'); small.style.cssText = 'color:var(--g2);font-size:.7rem;padding-left:2px'; this.parentNode.appendChild(small); }
+        small.textContent = PROD_MAP[val];
+      } else {
+        oItems[idx].art = val;
+      }
+    });
     el.addEventListener('change', function() {
-      oItems[parseInt(this.dataset.idx)][this.dataset.key] = this.value;
+      var idx = parseInt(this.dataset.idx);
+      oItems[idx].art = this.value.trim();
+      renderItems(); // Re-render to show label
     });
   });
-  document.querySelectorAll('#oi-list input').forEach(function(el) {
+  document.querySelectorAll('#oi-list input[data-key="qty"]').forEach(function(el) {
     el.addEventListener('change', function() {
       oItems[parseInt(this.dataset.idx)][this.dataset.key] = this.value;
     });
